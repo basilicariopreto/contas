@@ -470,7 +470,10 @@
       <input type="number" id="selAno" value="2026" min="2020" max="2040" aria-label="Ano" />
     </div>
     <button class="icon-btn" id="btnTheme" title="Alternar tema" aria-label="Alternar tema">🌙</button>
+    <button class="icon-btn" id="btnBackup" title="Fazer backup (JSON)" aria-label="Backup">💾</button>
+    <button class="icon-btn" id="btnRestore" title="Restaurar backup (JSON)" aria-label="Restaurar">📂</button>
     <button class="icon-btn" id="btnExport" title="Exportar CSV" aria-label="Exportar CSV">⬇️</button>
+    <input type="file" id="fileRestore" accept=".json" style="display:none" />
   </div>
 </header>
 
@@ -1404,6 +1407,54 @@ document.getElementById('btnTheme').addEventListener('click', () => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════
+   BACKUP & RESTORE
+═══════════════════════════════════════════════════════════════════ */
+document.getElementById('btnBackup').addEventListener('click', () => {
+  // Exporta TODAS as chaves do app como um único JSON
+  const backup = {};
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('contas_') || k === 'tema')
+    .forEach(k => { backup[k] = localStorage.getItem(k); });
+
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const hoje = new Date().toISOString().slice(0, 10);
+  a.href = url; a.download = `backup_contas_${hoje}.json`; a.click();
+  URL.revokeObjectURL(url);
+  toast('💾 Backup salvo!');
+});
+
+document.getElementById('btnRestore').addEventListener('click', () => {
+  if (!confirm('Isso vai substituir todos os dados atuais pelo backup.\nTem certeza?')) return;
+  document.getElementById('fileRestore').click();
+});
+
+document.getElementById('fileRestore').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const backup = JSON.parse(ev.target.result);
+      // Limpa chaves antigas do app
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('contas_'))
+        .forEach(k => localStorage.removeItem(k));
+      // Restaura
+      Object.entries(backup).forEach(([k, v]) => localStorage.setItem(k, v));
+      toast('📂 Backup restaurado com sucesso!', 3000);
+      setTimeout(() => location.reload(), 1500);
+    } catch {
+      toast('❌ Arquivo inválido!', 3000);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = ''; // reseta o input
+});
+
+/* ═══════════════════════════════════════════════════════════════════
    EXPORT CSV
 ═══════════════════════════════════════════════════════════════════ */
 document.getElementById('btnExport').addEventListener('click', () => {
@@ -1451,9 +1502,8 @@ document.addEventListener('keydown', e => {
   document.getElementById('selMes').addEventListener('change', renderTudo);
   document.getElementById('selAno').addEventListener('change', renderTudo);
 
-  migrarReceitas(); // reorganiza receitas existentes para o mês correto
-  renderTudo();
-})();
+  migrarReceitas(); // só roda se houver receitas fora do mês correto
+  renderTudo();})();
 </script>
 </body>
 </html>
