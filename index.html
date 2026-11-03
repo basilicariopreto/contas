@@ -349,9 +349,11 @@
     .b-fixo     { background: var(--blue-l);    color: var(--blue);   }
     .b-variavel { background: var(--yellow-l);  color: var(--yellow); }
     .b-receita  { background: var(--green-l);   color: var(--green);  }
-    .b-pago     { background: var(--green-l);   color: var(--green);  }
-    .b-pendente { background: var(--yellow-l);  color: var(--yellow); }
-    .b-atrasado { background: var(--red-l);     color: var(--red);    }
+    .b-pago      { background: var(--green-l);   color: var(--green);  }
+    .b-recebido  { background: var(--green-l);   color: var(--green);  }
+    .b-a-receber { background: var(--yellow-l);  color: var(--yellow); }
+    .b-pendente  { background: var(--yellow-l);  color: var(--yellow); }
+    .b-atrasado  { background: var(--red-l);     color: var(--red);    }
 
     /* ── Row actions ────────────────────────────────────────────── */
     .row-actions { display: flex; gap: 5px; justify-content: flex-end; }
@@ -868,7 +870,10 @@ function togglePago(tipo, id) {
   item.pago = !item.pago;
   salvarDados(d);
   renderTudo();
-  toast(item.pago ? '✅ Marcado como pago!' : '↩️ Marcado como pendente');
+  toast(item.pago
+    ? (tipo === 'receitas' ? '✅ Marcado como recebido!' : '✅ Marcado como pago!')
+    : (tipo === 'receitas' ? '↩️ Marcado como a receber' : '↩️ Marcado como pendente')
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -937,7 +942,16 @@ function remover(tipo, id) {
 /* ═══════════════════════════════════════════════════════════════════
    STATUS BADGE
 ═══════════════════════════════════════════════════════════════════ */
-function statusBadge(pago, dataOuDia, isFixa) {
+function statusBadge(pago, dataOuDia, isFixa, isReceita) {
+  if (isReceita) {
+    if (pago) return '<span class="badge b-recebido">✓ Recebido</span>';
+    if (dataOuDia) {
+      const hoje = new Date(); hoje.setHours(0,0,0,0);
+      const d = new Date(dataOuDia + 'T00:00:00');
+      if (d < hoje) return '<span class="badge b-atrasado">⚠ Atrasado</span>';
+    }
+    return '<span class="badge b-a-receber">A Receber</span>';
+  }
   if (pago) return '<span class="badge b-pago">✓ Pago</span>';
   if (isFixa) {
     if (dataOuDia) {
@@ -1076,9 +1090,9 @@ function renderReceitas(lista) {
       <td><span class="badge ${r.tipo === 'fixo' ? 'b-fixo' : 'b-variavel'}">${r.tipo}</span></td>
       <td>${fmtDate(r.data)}</td>
       <td class="val-pos">${fmt(r.valor)}</td>
-      <td>${statusBadge(r.pago, r.data)}</td>
+      <td>${statusBadge(r.pago, r.data, false, true)}</td>
       <td><div class="row-actions">
-        <button class="act-btn ${r.pago ? 'act-paid' : 'act-pay'}" onclick="togglePago('receitas',${r.id})" title="${r.pago ? 'Desmarcar' : 'Marcar pago'}">✓</button>
+        <button class="act-btn ${r.pago ? 'act-paid' : 'act-pay'}" onclick="togglePago('receitas',${r.id})" title="${r.pago ? 'Desmarcar recebido' : 'Marcar como recebido'}">✓</button>
         <button class="act-btn act-edit" onclick="abrirEdicao('receitas',${r.id})" title="Editar">✎</button>
         <button class="act-btn act-del"  onclick="remover('receitas',${r.id})" title="Remover">✕</button>
       </div></td>
