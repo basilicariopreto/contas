@@ -125,6 +125,10 @@
       gap: 16px;
       margin-bottom: 24px;
     }
+    /* quando o card de saldo anterior está visível, expande para 5 colunas */
+    .kpi-grid.has-anterior {
+      grid-template-columns: repeat(5, 1fr);
+    }
 
     .kpi {
       background: var(--surface);
@@ -155,15 +159,18 @@
     .k-despesa .kpi-icon { background: var(--red-l);    color: var(--red);     }
     .k-saldo   .kpi-icon { background: var(--primary-l);color: var(--primary); }
     .k-pagas   .kpi-icon { background: var(--yellow-l); color: var(--yellow);  }
+    .k-anterior .kpi-icon{ background: #e0e7ff;         color: #6366f1;        }
 
     .kpi-label { font-size: 0.75rem; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
     .kpi-value { font-size: 1.55rem; font-weight: 800; letter-spacing: -.5px; }
     .kpi-sub   { font-size: 0.75rem; color: var(--text3); margin-top: 4px; }
 
-    .k-receita .kpi-value { color: var(--green);   }
-    .k-despesa .kpi-value { color: var(--red);     }
-    .k-saldo   .kpi-value { color: var(--primary); }
-    .k-pagas   .kpi-value { color: var(--yellow);  }
+    .k-receita  .kpi-value { color: var(--green);   }
+    .k-despesa  .kpi-value { color: var(--red);     }
+    .k-saldo    .kpi-value { color: var(--primary); }
+    .k-pagas    .kpi-value { color: var(--yellow);  }
+    .k-anterior .kpi-value { color: #6366f1;        }
+    .k-anterior::before    { background: #6366f1;   }
 
     /* ── Two column layout ──────────────────────────────────────── */
     .two-col { display: grid; grid-template-columns: 1fr 340px; gap: 20px; margin-bottom: 20px; }
@@ -421,18 +428,23 @@
     .paid-bar-fill { height: 100%; background: var(--green); border-radius: 99px; transition: width .5s ease; }
 
     /* ── Responsive ─────────────────────────────────────────────── */
+    @media (max-width: 1100px) {
+      .kpi-grid.has-anterior { grid-template-columns: repeat(3, 1fr); }
+    }
     @media (max-width: 900px) {
       .kpi-grid  { grid-template-columns: repeat(2, 1fr); }
+      .kpi-grid.has-anterior { grid-template-columns: repeat(2, 1fr); }
       .two-col   { grid-template-columns: 1fr; }
     }
     @media (max-width: 540px) {
       .kpi-grid  { grid-template-columns: 1fr 1fr; }
+      .kpi-grid.has-anterior { grid-template-columns: 1fr 1fr; }
       header h1  { display: none; }
       .month-pill input { width: 44px; }
       .form-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 380px) {
-      .kpi-grid { grid-template-columns: 1fr; }
+      .kpi-grid, .kpi-grid.has-anterior { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -466,7 +478,7 @@
 <main class="page">
 
   <!-- KPI cards -->
-  <div class="kpi-grid">
+  <div class="kpi-grid" id="kpiGrid">
     <div class="kpi k-receita">
       <div class="kpi-icon">💵</div>
       <div class="kpi-label">Receitas</div>
@@ -479,9 +491,15 @@
       <div class="kpi-value" id="kDespesaVal">R$ 0,00</div>
       <div class="kpi-sub" id="kDespesaSub">0 lançamentos</div>
     </div>
+    <div class="kpi k-anterior" id="kpiSaldoAnt" style="display:none">
+      <div class="kpi-icon">🔁</div>
+      <div class="kpi-label">Saldo Anterior</div>
+      <div class="kpi-value" id="kSaldoAntVal">R$ 0,00</div>
+      <div class="kpi-sub" id="kSaldoAntSub">—</div>
+    </div>
     <div class="kpi k-saldo">
       <div class="kpi-icon">📊</div>
-      <div class="kpi-label">Saldo</div>
+      <div class="kpi-label">Saldo do Mês</div>
       <div class="kpi-value" id="kSaldoVal">R$ 0,00</div>
       <div class="kpi-sub" id="kSaldoSub">—</div>
     </div>
@@ -769,21 +787,62 @@ function proximoId(lista) {
 /* ═══════════════════════════════════════════════════════════════════
    STORAGE
 ═══════════════════════════════════════════════════════════════════ */
+function chaveMs(mes, ano) {
+  return `contas_${ano}_${mes}`;
+}
+
 function chave() {
   const m = document.getElementById('selMes').value;
   const a = document.getElementById('selAno').value;
-  return `contas_${a}_${m}`;
+  return chaveMs(m, a);
 }
 
-function getDados() {
+function getDadosMs(mes, ano) {
   try {
-    const raw = localStorage.getItem(chave());
+    const raw = localStorage.getItem(chaveMs(mes, ano));
     return raw ? JSON.parse(raw) : { receitas: [], fixas: [], variaveis: [] };
   } catch { return { receitas: [], fixas: [], variaveis: [] }; }
 }
 
+function getDados() {
+  const m = +document.getElementById('selMes').value;
+  const a = +document.getElementById('selAno').value;
+  return getDadosMs(m, a);
+}
+
+function salvarDadosMs(mes, ano, d) {
+  localStorage.setItem(chaveMs(mes, ano), JSON.stringify(d));
+}
+
 function salvarDados(d) {
-  localStorage.setItem(chave(), JSON.stringify(d));
+  const m = +document.getElementById('selMes').value;
+  const a = +document.getElementById('selAno').value;
+  salvarDadosMs(m, a, d);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SALDO ANTERIOR (recursivo por meses)
+═══════════════════════════════════════════════════════════════════ */
+function calcSaldoMes(mes, ano) {
+  const d = getDadosMs(mes, ano);
+  const r = d.receitas.reduce((s, i) => s + i.valor, 0);
+  const f = d.fixas.reduce((s, i) => s + i.valor, 0);
+  const v = d.variaveis.reduce((s, i) => s + i.valor, 0);
+  return r - f - v;
+}
+
+function calcSaldoAnterior(mesAtual, anoAtual) {
+  // Soma os saldos de todos os meses anteriores que têm dados
+  let saldo = 0;
+  // Vai até 24 meses atrás para evitar loop infinito
+  let m = mesAtual, a = anoAtual;
+  for (let i = 0; i < 24; i++) {
+    m--; if (m < 0) { m = 11; a--; }
+    const raw = localStorage.getItem(chaveMs(m, a));
+    if (!raw) break; // para quando não tem mais dados
+    saldo += calcSaldoMes(m, a);
+  }
+  return saldo;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -804,18 +863,43 @@ function salvar(tipo) {
     const desc  = document.getElementById('rDesc').value.trim();
     const valor = parseFloat(document.getElementById('rValor').value);
     if (!desc || !valor || valor <= 0) { toast('⚠️ Preencha descrição e valor.'); return; }
-    d.receitas.push({
-      id: proximoId(d.receitas),
+    const dataStr = document.getElementById('rData').value; // 'YYYY-MM-DD' ou ''
+
+    // Determina em qual mês/ano o lançamento deve ser salvo
+    let destMes = +document.getElementById('selMes').value;
+    let destAno = +document.getElementById('selAno').value;
+    if (dataStr) {
+      const [dA, dM] = dataStr.split('-').map(Number);
+      destAno = dA; destMes = dM - 1; // mês 0-indexed
+    }
+
+    const destDados = getDadosMs(destMes, destAno);
+    destDados.receitas.push({
+      id: proximoId(destDados.receitas),
       desc, valor,
-      data: document.getElementById('rData').value,
+      data: dataStr,
       tipo: document.getElementById('rTipo').value,
       cat:  document.getElementById('rCat').value,
       obs:  document.getElementById('rObs').value.trim(),
       pago: false
     });
+    salvarDadosMs(destMes, destAno, destDados);
+
     limparForm(['rDesc','rValor','rData','rObs']);
     document.getElementById('rTipo').value = 'fixo';
     document.getElementById('rCat').value = 'Salário';
+
+    // Avisa se foi para outro mês
+    const mesSel = +document.getElementById('selMes').value;
+    const anoSel = +document.getElementById('selAno').value;
+    if (destMes !== mesSel || destAno !== anoSel) {
+      const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+      document.querySelectorAll('.add-form').forEach(f => f.classList.remove('open'));
+      renderTudo();
+      toast(`📅 Receita salva em ${nomes[destMes]}/${destAno} (data da entrada)`, 3500);
+      return;
+    }
   }
 
   if (tipo === 'fixa') {
@@ -1078,6 +1162,12 @@ function setPbar(fillId, labelId, lista) {
    RENDER TABLES
 ═══════════════════════════════════════════════════════════════════ */
 function renderReceitas(lista) {
+  lista = [...lista].sort((a, b) => {
+    if (!a.data && !b.data) return 0;
+    if (!a.data) return 1;
+    if (!b.data) return -1;
+    return a.data.localeCompare(b.data);
+  });
   const tb = document.getElementById('bodyReceitas');
   if (!lista.length) {
     tb.innerHTML = '<tr class="empty-row"><td colspan="7">Nenhuma receita lançada ainda</td></tr>';
@@ -1100,6 +1190,12 @@ function renderReceitas(lista) {
 }
 
 function renderFixas(lista) {
+  lista = [...lista].sort((a, b) => {
+    if (!a.dia && !b.dia) return 0;
+    if (!a.dia) return 1;
+    if (!b.dia) return -1;
+    return a.dia - b.dia;
+  });
   const tb = document.getElementById('bodyFixas');
   if (!lista.length) {
     tb.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhuma despesa fixa lançada ainda</td></tr>';
@@ -1121,6 +1217,12 @@ function renderFixas(lista) {
 }
 
 function renderVariaveis(lista) {
+  lista = [...lista].sort((a, b) => {
+    if (!a.data && !b.data) return 0;
+    if (!a.data) return 1;
+    if (!b.data) return -1;
+    return a.data.localeCompare(b.data);
+  });
   const tb = document.getElementById('bodyVariaveis');
   if (!lista.length) {
     tb.innerHTML = '<tr class="empty-row"><td colspan="6">Nenhuma despesa variável lançada ainda</td></tr>';
@@ -1146,6 +1248,9 @@ function renderVariaveis(lista) {
 ═══════════════════════════════════════════════════════════════════ */
 function renderTudo() {
   const d = getDados();
+  const mesAtual = +document.getElementById('selMes').value;
+  const anoAtual = +document.getElementById('selAno').value;
+
   renderReceitas(d.receitas);
   renderFixas(d.fixas);
   renderVariaveis(d.variaveis);
@@ -1155,7 +1260,10 @@ function renderTudo() {
   const totalF  = d.fixas.reduce((s, i)     => s + i.valor, 0);
   const totalV  = d.variaveis.reduce((s, i) => s + i.valor, 0);
   const totalD  = totalF + totalV;
-  const saldo   = totalR - totalD;
+
+  // Saldo acumulado dos meses anteriores
+  const saldoAnterior = calcSaldoAnterior(mesAtual, anoAtual);
+  const saldo = totalR - totalD + saldoAnterior;
 
   const allDespesas = [...d.fixas, ...d.variaveis];
   const pagas  = allDespesas.filter(i => i.pago).length;
@@ -1168,8 +1276,23 @@ function renderTudo() {
   document.getElementById('kDespesaVal').textContent  = fmt(totalD);
   document.getElementById('kDespesaSub').textContent  = `${allDespesas.length} lançamento(s)`;
 
+  // Card saldo anterior
+  const elSaldoAnt    = document.getElementById('kSaldoAntVal');
+  const elSaldoAntSub = document.getElementById('kSaldoAntSub');
+  const kpiGrid       = document.getElementById('kpiGrid');
+  if (saldoAnterior !== 0) {
+    document.getElementById('kpiSaldoAnt').style.display = '';
+    kpiGrid.classList.add('has-anterior');
+    elSaldoAnt.textContent = fmt(Math.abs(saldoAnterior));
+    elSaldoAnt.style.color = saldoAnterior >= 0 ? 'var(--green)' : 'var(--red)';
+    elSaldoAntSub.textContent = saldoAnterior >= 0 ? '🟢 Acumulado positivo' : '🔴 Acumulado negativo';
+  } else {
+    document.getElementById('kpiSaldoAnt').style.display = 'none';
+    kpiGrid.classList.remove('has-anterior');
+  }
+
   const elSaldo = document.getElementById('kSaldoVal');
-  elSaldo.textContent = fmt(saldo);
+  elSaldo.textContent = fmt(Math.abs(saldo));
   elSaldo.style.color = saldo >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('kSaldoSub').textContent =
     saldo >= 0 ? '🟢 Positivo' : '🔴 Negativo';
