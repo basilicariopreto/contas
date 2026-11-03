@@ -1312,6 +1312,61 @@ function renderTudo() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   MIGRAÇÃO: move receitas para o mês correto da data
+═══════════════════════════════════════════════════════════════════ */
+function migrarReceitas() {
+  let totalMovidas = 0;
+
+  // Varre todas as chaves do localStorage que são do app
+  const chaves = Object.keys(localStorage).filter(k => k.startsWith('contas_'));
+
+  chaves.forEach(k => {
+    let dados;
+    try { dados = JSON.parse(localStorage.getItem(k)); } catch { return; }
+    if (!dados || !dados.receitas) return;
+
+    // Extrai mês e ano da chave: contas_YYYY_M
+    const partes = k.split('_'); // ['contas', 'YYYY', 'M']
+    const anoChave = +partes[1];
+    const mesChave = +partes[2]; // 0-indexed
+
+    const ficam   = [];
+    const movidas = [];
+
+    dados.receitas.forEach(r => {
+      if (!r.data) { ficam.push(r); return; } // sem data, fica onde está
+      const [dA, dM] = r.data.split('-').map(Number);
+      const mesData = dM - 1; // 0-indexed
+      const anoData = dA;
+
+      if (mesData === mesChave && anoData === anoChave) {
+        ficam.push(r); // já está no lugar certo
+      } else {
+        movidas.push({ r, mesData, anoData }); // precisa mover
+      }
+    });
+
+    if (movidas.length === 0) return;
+
+    // Salva as que ficam
+    dados.receitas = ficam;
+    localStorage.setItem(k, JSON.stringify(dados));
+
+    // Move cada uma para o mês correto
+    movidas.forEach(({ r, mesData, anoData }) => {
+      const destDados = getDadosMs(mesData, anoData);
+      // evita duplicata (se já existir com mesmo id e desc)
+      const jaExiste = destDados.receitas.some(x => x.desc === r.desc && x.data === r.data && x.valor === r.valor);
+      if (!jaExiste) {
+        r.id = proximoId(destDados.receitas);
+        destDados.receitas.push(r);
+        salvarDadosMs(mesData, anoData, destDados);
+        totalMovidas++;
+      }
+    });
+  });
+
+/* ═══════════════════════════════════════════════════════════════════
    ESCAPAR HTML
 ═══════════════════════════════════════════════════════════════════ */
 function esc(s) {
@@ -1383,6 +1438,7 @@ document.addEventListener('keydown', e => {
   document.getElementById('selMes').addEventListener('change', renderTudo);
   document.getElementById('selAno').addEventListener('change', renderTudo);
 
+  migrarReceitas(); // reorganiza receitas existentes para o mês correto
   renderTudo();
 })();
 </script>
